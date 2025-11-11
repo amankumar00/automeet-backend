@@ -1,14 +1,21 @@
 import admin from "firebase-admin";
-admin.initializeApp({
-  credential: admin.credential.cert("./serviceAccountKey.json"),
-});
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 
+dotenv.config();
+
+// Initialize Firebase Admin
+const serviceAccount = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON
+  ? JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON)
+  : require("../serviceAccountKey.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
+
 import userRoutes from "./routes/users.routes";
 import meetingRoutes from "./routes/meetings.routes";
-dotenv.config();
 
 const app = express();
 app.use(cors());
