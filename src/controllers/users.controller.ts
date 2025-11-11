@@ -4,7 +4,7 @@ import { usersRef } from "../services/firestore.service";
 // CREATE user
 export const createUser = async (req: Request, res: Response) => {
   try {
-    const { name, company, email, role, past_meetings, past_attended } = req.body;
+    const { name, company, email, role, past_meetings, past_attended, auth_uid } = req.body;
 
     // Create user without user_id first
     const newUser = {
@@ -12,6 +12,7 @@ export const createUser = async (req: Request, res: Response) => {
       company,
       email,
       role,
+      auth_uid: auth_uid || null, // Optional: Link to Firebase Auth UID
       past_meetings: past_meetings ?? 0, // Default to 0 if not provided
       past_attended: past_attended ?? 0,  // Default to 0 if not provided
       created_at: new Date().toISOString(),
@@ -56,8 +57,8 @@ export const getUserById = async (req: Request, res: Response) => {
 // UPDATE user
 export const updateUser = async (req: Request, res: Response) => {
   try {
-    // Remove user_id from the update body to prevent modification
-    const { user_id, created_at, ...updateData } = req.body;
+    // Remove user_id and auth_uid from the update body to prevent modification
+    const { user_id, auth_uid, created_at, ...updateData } = req.body;
 
     await usersRef.doc(req.params.id).update({
       ...updateData,
