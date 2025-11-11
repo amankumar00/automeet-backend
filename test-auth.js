@@ -12,7 +12,7 @@
 const axios = require("axios");
 
 // REPLACE THIS with your Firebase Web API Key from Firebase Console
-const FIREBASE_WEB_API_KEY = "AIzaSyAR_E5LrkNfzD8S6VhfDPAPBnichLvCx_4";
+const FIREBASE_WEB_API_KEY = "test";
 const BACKEND_URL = "http://localhost:8080";
 
 // Test user credentials
