@@ -15,6 +15,7 @@ export const createUser = async (req: Request, res: Response) => {
       auth_uid: auth_uid || null, // Optional: Link to Firebase Auth UID
       past_meetings: past_meetings ?? 0, // Default to 0 if not provided
       past_attended: past_attended ?? 0,  // Default to 0 if not provided
+      predicted_attendance_probability: null, // Will be set when user is added to a meeting
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };

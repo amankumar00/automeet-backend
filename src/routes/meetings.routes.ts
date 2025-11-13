@@ -6,8 +6,12 @@ import {
   updateMeeting,
   deleteMeeting,
 } from "../controllers/meetings.controller";
+import { optionalAuth } from "../middleware/optional-auth.middleware";
 
 const router = Router();
+
+// Apply optional auth to all routes (works with or without token)
+router.use(optionalAuth);
 
 router.post("/", createMeeting);
 router.get("/", getAllMeetings);

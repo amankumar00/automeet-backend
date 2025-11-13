@@ -23,8 +23,16 @@ export const populateParticipantDetails = async (
   participants: ParticipantWithPrediction[]
 ): Promise<PopulatedParticipant[]> => {
   try {
+    // Filter out invalid participants (missing user_id)
+    const validParticipants = participants.filter(p => p && p.user_id);
+
+    if (validParticipants.length === 0) {
+      console.warn("No valid participants found");
+      return [];
+    }
+
     const populatedParticipants = await Promise.all(
-      participants.map(async (participant) => {
+      validParticipants.map(async (participant) => {
         try {
           const userDoc = await usersRef.doc(participant.user_id).get();
 

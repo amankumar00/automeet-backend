@@ -62,6 +62,23 @@ export const createMeeting = async (req: Request, res: Response) => {
       predicted_attendance_probability: predictions[index].probability,
     }));
 
+    // Also update each user's record with their predicted attendance probability
+    console.log("💾 Updating user records with predicted attendance probabilities...");
+    await Promise.all(
+      participantsWithPredictions.map(async (participant) => {
+        try {
+          const { usersRef } = await import("../services/firestore.service");
+          await usersRef.doc(participant.user_id).update({
+            predicted_attendance_probability: participant.predicted_attendance_probability,
+            updated_at: new Date().toISOString(),
+          });
+          console.log(`✅ Updated user ${participant.user_id} with probability: ${participant.predicted_attendance_probability.toFixed(2)}`);
+        } catch (error) {
+          console.error(`⚠️ Failed to update user ${participant.user_id}:`, error);
+        }
+      })
+    );
+
     const newMeeting = {
       creator_id,
       meeting_type,
@@ -156,12 +173,68 @@ export const getMeetingById = async (req: Request, res: Response) => {
 // UPDATE meeting
 export const updateMeeting = async (req: Request, res: Response) => {
   try {
-    await meetingsRef.doc(req.params.id).update({
+    console.log("📝 Update meeting request body:", JSON.stringify(req.body, null, 2));
+
+    const updateData: any = {
       ...req.body,
       updated_at: new Date().toISOString(),
-    });
+    };
+
+    // If participants are being updated, ensure they only contain user_id and probability
+    if (updateData.participants && Array.isArray(updateData.participants)) {
+      console.log("👥 Original participants:", JSON.stringify(updateData.participants, null, 2));
+
+      // Transform participants to only store user_id and predicted_attendance_probability
+      updateData.participants = updateData.participants.map((p: any) => {
+        console.log("🔍 Processing participant:", JSON.stringify(p));
+
+        // If participant is just a string (user_id), convert to proper format
+        if (typeof p === 'string') {
+          console.log("✅ Participant is string (user_id):", p);
+          return {
+            user_id: p,
+            predicted_attendance_probability: 0.5, // Default probability
+          };
+        }
+        // If participant is an object, extract only what we need
+        const result = {
+          user_id: p.user_id || p.id,
+          predicted_attendance_probability: p.predicted_attendance_probability || 0.5,
+        };
+        console.log("✅ Transformed participant:", JSON.stringify(result));
+        return result;
+      }).filter((p: any) => {
+        const isValid = !!p.user_id;
+        if (!isValid) {
+          console.warn("⚠️ Filtering out invalid participant (no user_id):", JSON.stringify(p));
+        }
+        return isValid;
+      });
+
+      console.log("✅ Final participants to store:", JSON.stringify(updateData.participants, null, 2));
+
+      // Update each user's record with their predicted attendance probability
+      console.log("💾 Updating user records with predicted attendance probabilities...");
+      await Promise.all(
+        updateData.participants.map(async (participant: any) => {
+          try {
+            const { usersRef } = await import("../services/firestore.service");
+            await usersRef.doc(participant.user_id).update({
+              predicted_attendance_probability: participant.predicted_attendance_probability,
+              updated_at: new Date().toISOString(),
+            });
+            console.log(`✅ Updated user ${participant.user_id} with probability: ${participant.predicted_attendance_probability.toFixed(2)}`);
+          } catch (error) {
+            console.error(`⚠️ Failed to update user ${participant.user_id}:`, error);
+          }
+        })
+      );
+    }
+
+    await meetingsRef.doc(req.params.id).update(updateData);
     res.json({ message: "Meeting updated successfully" });
   } catch (error: any) {
+    console.error("❌ Error updating meeting:", error);
     res.status(500).json({ error: error.message });
   }
 };

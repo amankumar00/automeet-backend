@@ -77,7 +77,17 @@ export const getAttendanceProbabilities = async (
         throw new Error(`Invalid response from ML API. Missing probability field.`);
       }
 
-      predictions.push(response.data);
+      // Boost low probabilities (if less than 0.79, add 0.2)
+      let adjustedProbability = response.data.probability;
+      if (adjustedProbability < 0.79) {
+        adjustedProbability = Math.min(1.0, adjustedProbability + 0.2);
+        console.log(`🔼 Boosted probability from ${response.data.probability.toFixed(2)} to ${adjustedProbability.toFixed(2)}`);
+      }
+
+      predictions.push({
+        probability: adjustedProbability,
+        prediction: response.data.prediction,
+      });
     }
 
     console.log(`🎯 Total predictions collected: ${predictions.length}`);
