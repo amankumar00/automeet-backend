@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { meetingsRef } from "../services/firestore.service";
+import { meetingsRef, usersRef } from "../services/firestore.service";
 import {
   getAttendanceProbabilities,
   getTimeOfDay,
@@ -7,6 +7,10 @@ import {
   AttendanceInput,
 } from "../services/attendance.service";
 import { getBatchUserStats } from "../services/user-stats.service";
+import {
+  notifyParticipantsNewMeeting,
+  notifyParticipantsRescheduled,
+} from "../services/email.service";
 
 // CREATE meeting with ML-based attendance prediction
 export const createMeeting = async (req: Request, res: Response) => {
@@ -98,6 +102,23 @@ export const createMeeting = async (req: Request, res: Response) => {
     const { populateParticipantDetails } = await import("../services/meeting-helpers.service");
     const populatedParticipants = await populateParticipantDetails(participantsWithPredictions);
 
+    // Send email notifications to all participants (don't await - run in background)
+    const creatorDoc = creator_id ? await usersRef.doc(creator_id).get() : null;
+    const creatorName = creatorDoc?.exists ? creatorDoc.data()?.name : undefined;
+
+    notifyParticipantsNewMeeting(populatedParticipants, {
+      meeting_id: ref.id,
+      meeting_type,
+      importance,
+      start_time: newMeeting.start_time,
+      end_time: newMeeting.end_time,
+      agenda,
+      meeting_link,
+      creator_name: creatorName,
+    }).catch((error) => {
+      console.error("⚠️ Error sending meeting notifications:", error);
+    });
+
     res.status(201).json({
       meeting_id: ref.id,
       ...newMeeting,
@@ -175,10 +196,22 @@ export const updateMeeting = async (req: Request, res: Response) => {
   try {
     console.log("📝 Update meeting request body:", JSON.stringify(req.body, null, 2));
 
+    // Get the existing meeting data to compare changes
+    const existingMeetingDoc = await meetingsRef.doc(req.params.id).get();
+    if (!existingMeetingDoc.exists) {
+      return res.status(404).json({ error: "Meeting not found" });
+    }
+    const existingMeetingData = existingMeetingDoc.data();
+
     const updateData: any = {
       ...req.body,
       updated_at: new Date().toISOString(),
     };
+
+    // Check if this is a reschedule (time changed)
+    const isReschedule =
+      (updateData.start_time && updateData.start_time !== existingMeetingData?.start_time) ||
+      (updateData.end_time && updateData.end_time !== existingMeetingData?.end_time);
 
     // If participants are being updated, ensure they only contain user_id and probability
     if (updateData.participants && Array.isArray(updateData.participants)) {
@@ -218,7 +251,6 @@ export const updateMeeting = async (req: Request, res: Response) => {
       await Promise.all(
         updateData.participants.map(async (participant: any) => {
           try {
-            const { usersRef } = await import("../services/firestore.service");
             await usersRef.doc(participant.user_id).update({
               predicted_attendance_probability: participant.predicted_attendance_probability,
               updated_at: new Date().toISOString(),
@@ -232,6 +264,37 @@ export const updateMeeting = async (req: Request, res: Response) => {
     }
 
     await meetingsRef.doc(req.params.id).update(updateData);
+
+    // Send email notifications if meeting was rescheduled or participants changed
+    if (isReschedule || updateData.participants) {
+      // Get the updated meeting data
+      const updatedMeetingDoc = await meetingsRef.doc(req.params.id).get();
+      const updatedMeetingData = updatedMeetingDoc.data();
+
+      if (updatedMeetingData?.participants && Array.isArray(updatedMeetingData.participants)) {
+        const { populateParticipantDetails } = await import("../services/meeting-helpers.service");
+        const populatedParticipants = await populateParticipantDetails(updatedMeetingData.participants);
+
+        // Get creator name
+        const creatorDoc = updatedMeetingData.creator_id ? await usersRef.doc(updatedMeetingData.creator_id).get() : null;
+        const creatorName = creatorDoc?.exists ? creatorDoc.data()?.name : undefined;
+
+        // Send reschedule notifications (don't await - run in background)
+        notifyParticipantsRescheduled(populatedParticipants, {
+          meeting_id: req.params.id,
+          meeting_type: updatedMeetingData.meeting_type,
+          importance: updatedMeetingData.importance,
+          start_time: updatedMeetingData.start_time,
+          end_time: updatedMeetingData.end_time,
+          agenda: updatedMeetingData.agenda,
+          meeting_link: updatedMeetingData.meeting_link,
+          creator_name: creatorName,
+        }).catch((error) => {
+          console.error("⚠️ Error sending reschedule notifications:", error);
+        });
+      }
+    }
+
     res.json({ message: "Meeting updated successfully" });
   } catch (error: any) {
     console.error("❌ Error updating meeting:", error);
