@@ -56,9 +56,20 @@ export const createMeeting = async (req: Request, res: Response) => {
 
     console.log("🤖 Sending to ML model:", JSON.stringify(attendanceInputs, null, 2));
 
-    // Get attendance predictions from ML model
-    const predictions = await getAttendanceProbabilities(attendanceInputs);
-    console.log("✅ ML predictions received:", JSON.stringify(predictions, null, 2));
+    // Get attendance predictions from ML model (with fallback if it fails)
+    let predictions;
+    try {
+      predictions = await getAttendanceProbabilities(attendanceInputs);
+      console.log("✅ ML predictions received:", JSON.stringify(predictions, null, 2));
+    } catch (error: any) {
+      console.warn("⚠️ ML prediction failed, using fallback probabilities:", error.message);
+      // Use fallback probabilities based on attendance_rate
+      predictions = attendanceInputs.map((input) => ({
+        probability: Math.max(0.5, input.attendance_rate), // Use attendance rate or 0.5 minimum
+        prediction: input.attendance_rate >= 0.5 ? 1 : 0,
+      }));
+      console.log("📊 Using fallback predictions:", JSON.stringify(predictions, null, 2));
+    }
 
     // Map predictions back to participants (only store user_id and probability)
     const participantsWithPredictions = participants.map((userId, index) => ({
