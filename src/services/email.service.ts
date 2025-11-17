@@ -1,4 +1,16 @@
 import nodemailer from "nodemailer";
+import sgMail from "@sendgrid/mail";
+
+// Email provider configuration
+const USE_SENDGRID = !!process.env.SENDGRID_API_KEY;
+
+// Initialize SendGrid if API key is available
+if (USE_SENDGRID) {
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY!);
+  console.log("📧 Email service: Using SendGrid");
+} else {
+  console.log("📧 Email service: Using nodemailer (SMTP)");
+}
 
 interface EmailConfig {
   host: string;
@@ -10,7 +22,7 @@ interface EmailConfig {
   };
 }
 
-// Create reusable transporter
+// Create reusable transporter (for nodemailer fallback)
 const createTransporter = () => {
   const config: EmailConfig = {
     host: process.env.SMTP_HOST || "smtp.gmail.com",
@@ -294,17 +306,34 @@ export const sendNewMeetingEmail = async (
       return;
     }
 
-    const transporter = createTransporter();
+    const htmlContent = generateNewMeetingEmail(participant.name, meetingData);
+    const fromEmail = process.env.SMTP_USER || "noreply@automeet.app";
 
-    const mailOptions = {
-      from: `"AutoMeet" <${process.env.SMTP_USER}>`,
-      to: participant.email,
-      subject: `New Meeting: ${meetingData.agenda}`,
-      html: generateNewMeetingEmail(participant.name, meetingData),
-    };
+    if (USE_SENDGRID) {
+      // Use SendGrid API
+      const msg = {
+        to: participant.email,
+        from: fromEmail,
+        subject: `New Meeting: ${meetingData.agenda}`,
+        html: htmlContent,
+      };
 
-    await transporter.sendMail(mailOptions);
-    console.log(`✅ Email sent to ${participant.name} (${participant.email})`);
+      await sgMail.send(msg);
+      console.log(`✅ [SendGrid] Email sent to ${participant.name} (${participant.email})`);
+    } else {
+      // Use nodemailer (SMTP)
+      const transporter = createTransporter();
+
+      const mailOptions = {
+        from: `"AutoMeet" <${fromEmail}>`,
+        to: participant.email,
+        subject: `New Meeting: ${meetingData.agenda}`,
+        html: htmlContent,
+      };
+
+      await transporter.sendMail(mailOptions);
+      console.log(`✅ [SMTP] Email sent to ${participant.name} (${participant.email})`);
+    }
   } catch (error: any) {
     console.error(`❌ Failed to send email to ${participant.email}:`, error.message);
     // Don't throw error - we don't want email failures to break meeting creation
@@ -330,17 +359,34 @@ export const sendRescheduledMeetingEmail = async (
       return;
     }
 
-    const transporter = createTransporter();
+    const htmlContent = generateRescheduledMeetingEmail(participant.name, meetingData);
+    const fromEmail = process.env.SMTP_USER || "noreply@automeet.app";
 
-    const mailOptions = {
-      from: `"AutoMeet" <${process.env.SMTP_USER}>`,
-      to: participant.email,
-      subject: `Meeting Rescheduled: ${meetingData.agenda}`,
-      html: generateRescheduledMeetingEmail(participant.name, meetingData),
-    };
+    if (USE_SENDGRID) {
+      // Use SendGrid API
+      const msg = {
+        to: participant.email,
+        from: fromEmail,
+        subject: `Meeting Rescheduled: ${meetingData.agenda}`,
+        html: htmlContent,
+      };
 
-    await transporter.sendMail(mailOptions);
-    console.log(`✅ Reschedule email sent to ${participant.name} (${participant.email})`);
+      await sgMail.send(msg);
+      console.log(`✅ [SendGrid] Reschedule email sent to ${participant.name} (${participant.email})`);
+    } else {
+      // Use nodemailer (SMTP)
+      const transporter = createTransporter();
+
+      const mailOptions = {
+        from: `"AutoMeet" <${fromEmail}>`,
+        to: participant.email,
+        subject: `Meeting Rescheduled: ${meetingData.agenda}`,
+        html: htmlContent,
+      };
+
+      await transporter.sendMail(mailOptions);
+      console.log(`✅ [SMTP] Reschedule email sent to ${participant.name} (${participant.email})`);
+    }
   } catch (error: any) {
     console.error(`❌ Failed to send email to ${participant.email}:`, error.message);
     // Don't throw error - we don't want email failures to break meeting updates
